@@ -38,6 +38,8 @@ import org.hibernate.annotations.CascadeType;
 import org.jasig.ssp.model.reference.ConfidentialityLevel;
 import org.jasig.ssp.model.reference.JournalSource;
 import org.jasig.ssp.model.reference.JournalTrack;
+import org.jasig.ssp.service.ObjectNotFoundException;
+import org.jasig.ssp.web.api.validation.ValidationException;
 
 @Entity
 @Inheritance(strategy = InheritanceType.TABLE_PER_CLASS)
@@ -171,5 +173,17 @@ public class JournalEntry
 		// collections are not included in these calculations
 
 		return result;
+	}
+
+	public boolean hasTransition() {
+		// search for a JournalStep that indicates a transition
+		for (final JournalEntryDetail detail : this.getJournalEntryDetails()) {
+			if (detail.getJournalStepJournalStepDetail().getJournalStep().isUsedForTransition()) {
+				// exit early because no need to loop through others
+				return true;
+			}
+		}
+
+		return false;
 	}
 }
