@@ -18,10 +18,7 @@
  */
 package org.jasig.ssp.model;
 
-import java.util.Date;
-import java.util.List;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 
 import javax.persistence.Column;
 import javax.persistence.Entity;
@@ -42,9 +39,14 @@ import org.hibernate.annotations.TypeDef;
 import org.jasig.ssp.model.reference.Campus;
 import org.jasig.ssp.model.reference.EarlyAlertReason;
 import org.jasig.ssp.model.reference.EarlyAlertSuggestion;
+import org.jasig.ssp.service.ObjectNotFoundException;
+import org.jasig.ssp.service.PersonService;
+import org.jasig.ssp.service.reference.EarlyAlertReasonService;
+import org.jasig.ssp.service.reference.EarlyAlertSuggestionService;
 import org.jasig.ssp.util.uuid.UUIDCustomType;
 
 import com.google.common.collect.Sets;
+import org.jasig.ssp.web.api.validation.ValidationException;
 
 /**
  * EarlyAlert
@@ -397,5 +399,96 @@ public class EarlyAlert // NOPMD by jon.adams on 5/24/12 1:29 PM
 
 	public void setEnrollmentStatus(String enrollmentStatus) {
 		this.enrollmentStatus = enrollmentStatus;
+	}
+
+	public UUID getStudentAdvisor() throws ValidationException {
+		UUID assignedAdvisor = getEarlyAlertAdvisor();
+		if (assignedAdvisor == null) {
+			throw new ValidationException("Could not determine the Early Alert Advisor for student ID " + person.getId());
+		}
+
+		return assignedAdvisor;
+	}
+
+	/**
+	 * Business logic to determine the advisor that is assigned to the student
+	 * for this Early Alert.
+	 *
+	 * @throws ValidationException
+	 *             If Early Alert, Student, and/or system information could not
+	 *             determine the advisor for this student.
+	 * @return The assigned advisor
+	 */
+	private UUID getEarlyAlertAdvisor()
+			throws ValidationException {
+		// Check for student already assigned to an advisor (a.k.a. coach)
+		if ((getPerson().getCoach() != null) &&
+				(getPerson().getCoach().getId() != null)) {
+			return getPerson().getCoach().getId();
+		}
+
+		// Get campus Early Alert coordinator
+		if (getCampus() == null) {
+			throw new IllegalArgumentException("Campus ID can not be null.");
+		}
+
+		if (getCampus().getEarlyAlertCoordinatorId() != null) {
+			// Return Early Alert coordinator UUID
+			return getCampus().getEarlyAlertCoordinatorId();
+		}
+
+		// TODO If no campus EA Coordinator, assign to default EA Coordinator
+		// (which is not yet implemented)
+
+		// getEarlyAlertAdvisor should never return null
+		throw new ValidationException(
+				"Could not determined the Early Alert Coordinator for this student. Ensure that a default coordinator is set globally and for all campuses.");
+	}
+
+	public void updateFields(EarlyAlert obj,
+							 PersonService personService,
+							 EarlyAlertReasonService earlyAlertReasonService,
+							 EarlyAlertSuggestionService earlyAlertSuggestionService) throws ObjectNotFoundException {
+		this.setCourseName(obj.getCourseName());
+		this.setCourseTitle(obj.getCourseTitle());
+		this.setEmailCC(obj.getEmailCC());
+		this.setCampus(obj.getCampus());
+		this.setEarlyAlertReasonOtherDescription(obj
+				.getEarlyAlertReasonOtherDescription());
+		this.setComment(obj.getComment());
+		this.setClosedDate(obj.getClosedDate());
+		if ( obj.getClosedById() == null ) {
+			this.setClosedBy(null);
+		} else {
+			this.setClosedBy(personService.get(obj.getClosedById()));
+		}
+
+		if (obj.getPerson() == null) {
+			this.setPerson(null);
+		} else {
+			this.setPerson(personService.get(obj.getPerson().getId()));
+		}
+
+		final Set<EarlyAlertReason> earlyAlertReasons = new HashSet<EarlyAlertReason>();
+		if (obj.getEarlyAlertReasons() != null) {
+			for (final EarlyAlertReason reason : obj.getEarlyAlertReasons()) {
+				earlyAlertReasons.add(earlyAlertReasonService.load(reason
+						.getId()));
+			}
+		}
+
+		this.setEarlyAlertReasons(earlyAlertReasons);
+
+		final Set<EarlyAlertSuggestion> earlyAlertSuggestions = new HashSet<EarlyAlertSuggestion>();
+		if (obj.getEarlyAlertSuggestions() != null) {
+			for (final EarlyAlertSuggestion reason : obj
+					.getEarlyAlertSuggestions()) {
+				earlyAlertSuggestions.add(earlyAlertSuggestionService
+						.load(reason
+								.getId()));
+			}
+		}
+
+		this.setEarlyAlertSuggestions(earlyAlertSuggestions);
 	}
 }
